@@ -27,11 +27,11 @@ import {
 } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
+} from "../components/ui/context-menu";
 
 const initialNodes: Node<FlowNodeData | PromptNodeData>[] = [
     {
@@ -151,7 +151,6 @@ export default function Home() {
 
     const onNodeContextMenu = useCallback(
         (event: React.MouseEvent, node: Node) => {
-            event.preventDefault();
             const bounds = flowBoundsRef.current?.getBoundingClientRect();
             const x = bounds ? event.clientX - bounds.left : event.clientX;
             const y = bounds ? event.clientY - bounds.top : event.clientY;
@@ -160,6 +159,11 @@ export default function Home() {
         },
         []
     );
+
+    const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
+        event.preventDefault();
+        setContextMenu(null);
+    }, []);
 
     const closeContextMenu = useCallback(() => {
         setContextMenu(null);
@@ -238,71 +242,58 @@ export default function Home() {
                     </Card>
                 </aside>
 
-                <section className="relative" ref={flowBoundsRef}>
-                    <ReactFlow
-                        nodes={nodes}
-                        edges={edges}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
-                        onConnect={onConnect}
-                        onNodeContextMenu={onNodeContextMenu}
-                        onPaneClick={closeContextMenu}
-                        nodeTypes={nodeTypes}
-                        fitView
-                        className="bg-background"
-                    >
-                        <MiniMap
-                            className="bg-card/80!"
-                            nodeColor={() => "var(--muted-foreground)"}
-                            maskColor="color-mix(in oklch, var(--background) 70%, transparent)"
-                        />
-                        <Controls className="bg-card/80! text-foreground!" />
-                        <Background gap={24} color="oklch(0.52 0.004 286.32)" />
-                    </ReactFlow>
-                    <Badge
-                        variant="outline"
-                        className="absolute left-6 top-6 border-border/60 bg-background/80 text-xs text-muted-foreground"
-                    >
-                        Stage: Draft · {nodes.length} nodes · {edges.length}{" "}
-                        edges
-                    </Badge>
-                    <DropdownMenu
-                        open={!!contextMenu}
-                        onOpenChange={(open) => {
-                            if (!open) {
-                                setContextMenu(null);
-                            }
-                        }}
-                    >
-                        <DropdownMenuTrigger asChild>
-                            <span
-                                className="absolute z-10 h-1 w-1"
-                                style={
-                                    contextMenu
-                                        ? {
-                                              left: contextMenu.x,
-                                              top: contextMenu.y,
-                                          }
-                                        : { left: -9999, top: -9999 }
-                                }
-                            />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                            align="start"
-                            side="right"
-                            sideOffset={6}
+                <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                        <section className="relative" ref={flowBoundsRef}>
+                            <ReactFlow
+                                nodes={nodes}
+                                edges={edges}
+                                onNodesChange={onNodesChange}
+                                onEdgesChange={onEdgesChange}
+                                onConnect={onConnect}
+                                onNodeContextMenu={onNodeContextMenu}
+                                onPaneContextMenu={onPaneContextMenu}
+                                onPaneClick={closeContextMenu}
+                                nodeTypes={nodeTypes}
+                                fitView
+                                className="bg-background"
+                            >
+                                <MiniMap
+                                    className="bg-card/80!"
+                                    nodeColor={() => "var(--muted-foreground)"}
+                                    maskColor="color-mix(in oklch, var(--background) 70%, transparent)"
+                                />
+                                <Controls className="bg-card/80! text-foreground!" />
+                                <Background
+                                    gap={24}
+                                    color="oklch(0.52 0.004 286.32)"
+                                />
+                            </ReactFlow>
+                            <Badge
+                                variant="outline"
+                                className="absolute left-6 top-6 border-border/60 bg-background/80 text-xs text-muted-foreground"
+                            >
+                                Stage: Draft · {nodes.length} nodes ·{" "}
+                                {edges.length} edges
+                            </Badge>
+                        </section>
+                    </ContextMenuTrigger>
+                    {contextMenu && (
+                        <ContextMenuContent
                             className="w-44 border-border/60 bg-popover text-popover-foreground shadow-xl shadow-black/20"
                             onClick={(event) => event.stopPropagation()}
+                            onPointerDownOutside={() => setContextMenu(null)}
+                            onEscapeKeyDown={() => setContextMenu(null)}
                         >
-                            <DropdownMenuItem
+                            <ContextMenuItem
                                 onClick={deleteNode}
-                                className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+                                variant="destructive"
                             >
                                 Delete node
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </section>
+                            </ContextMenuItem>
+                        </ContextMenuContent>
+                    )}
+                </ContextMenu>
 
                 <aside className="border-l border-border/60 bg-background/70 p-6">
                     <h2 className="text-xs font-semibold uppercase text-muted-foreground">
