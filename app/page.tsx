@@ -91,6 +91,31 @@ export default function Home() {
         x: number;
         y: number;
     } | null>(null);
+    const addPromptNode = useCallback(() => {
+        setNodes((current) => {
+            const id = `prompt-${Date.now()}`;
+            const offset = current.length * 40;
+            return [
+                ...current,
+                {
+                    id,
+                    type: "promptNode",
+                    position: { x: -120 + offset, y: 80 + offset },
+                    data: {
+                        title: "Prompt Builder",
+                        badge: "Input",
+                        tone: "sky",
+                        systemPrompt:
+                            "You are a helpful assistant that follows the tool policy.",
+                        userPrompt:
+                            "Summarize the user's request and draft a plan for the flow.",
+                        model: "gpt-4.1-mini",
+                        returnJson: false,
+                    },
+                },
+            ];
+        });
+    }, [setNodes]);
 
     const onConnect = useCallback(
         (connection: Connection) => {
@@ -99,10 +124,7 @@ export default function Home() {
             }
 
             setEdges((eds) =>
-                addEdge(
-                    { ...connection, animated: true, style: edgeStyle },
-                    eds
-                )
+                addEdge({ ...connection, style: edgeStyle }, eds)
             );
         },
         [edges, setEdges]
@@ -244,7 +266,16 @@ export default function Home() {
                             <Card
                                 key={item.name}
                                 size="sm"
-                                className="border-border/60 bg-card/70"
+                                className={`border-border/60 bg-card/70 ${
+                                    item.name === "Prompt"
+                                        ? "cursor-pointer transition hover:border-border hover:bg-card"
+                                        : ""
+                                }`}
+                                onClick={
+                                    item.name === "Prompt"
+                                        ? addPromptNode
+                                        : undefined
+                                }
                             >
                                 <CardHeader>
                                     <CardTitle>{item.name}</CardTitle>
