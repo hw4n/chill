@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 
 import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
 import {
     Card,
     CardContent,
@@ -19,33 +18,37 @@ import {
     ComboboxList,
     useComboboxAnchor,
 } from "../../../components/ui/combobox";
+import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
+import { useFlowStore } from "../../store/flowStore";
 import { toneStyles, type PromptNodeData } from "./types";
 
-const modelOptions = [
-    { value: "gpt-4.1-mini", label: "gpt-4.1-mini" },
-    { value: "gpt-4.1", label: "gpt-4.1" },
-    { value: "gpt-4o-mini", label: "gpt-4o-mini" },
-    { value: "gpt-4o", label: "gpt-4o" },
-    { value: "o3-mini", label: "o3-mini" },
-];
+const modelOptions = [{ value: "gemini-2.5-flash", label: "gemini-2.5-flash" }];
 
-export default function PromptNode({ data }: NodeProps<PromptNodeData>) {
-    const [systemPrompt, setSystemPrompt] = useState(data.systemPrompt);
-    const [userPrompt, setUserPrompt] = useState(data.userPrompt);
-    const [model, setModel] = useState("gpt-4.1-mini");
+export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
     const modelAnchor = useComboboxAnchor();
+    const setNodes = useFlowStore((state) => state.setNodes);
+    const nodesById = useFlowStore((state) => state.nodesById);
+
+    const updateNodeData = useCallback(
+        (partial: Partial<PromptNodeData>) => {
+            setNodes((nodes) =>
+                nodes.map((node) =>
+                    node.id === id
+                        ? { ...node, data: { ...node.data, ...partial } }
+                        : node
+                )
+            );
+        },
+        [id, setNodes]
+    );
 
     return (
         <Card className="min-w-[280px] border-border/60 bg-card/90 text-card-foreground shadow-lg shadow-black/20 backdrop-blur">
-            <Handle
-                type="source"
-                position={Position.Right}
-                className="h-3! w-3! border-2! border-white! bg-white!"
-            />
             <CardHeader className="flex-row items-start justify-between space-y-0 p-4 pb-2">
                 <CardTitle className="text-sm font-semibold">
                     {data.title}
+                    <p className="text-[11px] text-muted-foreground"># {id}</p>
                 </CardTitle>
                 <div className="flex items-center gap-2">
                     <Badge
@@ -63,8 +66,10 @@ export default function PromptNode({ data }: NodeProps<PromptNodeData>) {
                     Model
                 </p>
                 <Combobox
-                    value={model}
-                    onValueChange={(value) => setModel(value ?? "")}
+                    value={data.model}
+                    onValueChange={(value) => {
+                        updateNodeData({ model: value ?? "" });
+                    }}
                 >
                     <div ref={modelAnchor}>
                         <ComboboxInput
@@ -85,6 +90,17 @@ export default function PromptNode({ data }: NodeProps<PromptNodeData>) {
                         </ComboboxList>
                     </ComboboxContent>
                 </Combobox>
+                <div className="flex items-center justify-between rounded-md border border-border/60 bg-background/60 px-2 py-1.5">
+                    <span className="text-[11px] uppercase text-muted-foreground">
+                        Return JSON
+                    </span>
+                    <Switch
+                        checked={data.returnJson}
+                        onCheckedChange={(checked) => {
+                            updateNodeData({ returnJson: checked });
+                        }}
+                    />
+                </div>
             </CardContent>
             <CardContent className="space-y-3 p-4 pl-0 pt-0 text-xs text-muted-foreground">
                 <div className="relative pl-4">
@@ -98,10 +114,11 @@ export default function PromptNode({ data }: NodeProps<PromptNodeData>) {
                         System
                     </p>
                     <Textarea
-                        value={systemPrompt}
-                        onChange={(event) =>
-                            setSystemPrompt(event.target.value)
-                        }
+                        value={data.systemPrompt}
+                        onChange={(event) => {
+                            const nextValue = event.target.value;
+                            updateNodeData({ systemPrompt: nextValue });
+                        }}
                         className="mt-2 h-24 resize-none bg-background/60 text-xs"
                     />
                 </div>
@@ -116,8 +133,26 @@ export default function PromptNode({ data }: NodeProps<PromptNodeData>) {
                         User
                     </p>
                     <Textarea
-                        value={userPrompt}
-                        onChange={(event) => setUserPrompt(event.target.value)}
+                        value={data.userPrompt}
+                        onChange={(event) => {
+                            const nextValue = event.target.value;
+                            updateNodeData({ userPrompt: nextValue });
+                        }}
+                        className="mt-2 h-20 resize-none bg-background/60 text-xs"
+                    />
+                </div>
+                <div className="relative pl-4">
+                    <Handle
+                        type="source"
+                        position={Position.Right}
+                        className="absolute -right-2 top-1 h-3! w-3! translate-x-4 translate-y-2 border-2! border-white! bg-white!"
+                    />
+                    <p className="text-[11px] uppercase text-muted-foreground">
+                        Result
+                    </p>
+                    <Textarea
+                        value={nodesById[id]?.result ?? "..."}
+                        readOnly
                         className="mt-2 h-20 resize-none bg-background/60 text-xs"
                     />
                 </div>

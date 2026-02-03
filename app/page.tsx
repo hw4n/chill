@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import ReactFlow, {
     addEdge,
     Background,
@@ -9,14 +9,11 @@ import ReactFlow, {
     type Connection,
     type Edge,
     type Node,
-    useEdgesState,
-    useNodesState,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
 import FlowNode from "./components/flow/FlowNode";
 import PromptNode from "./components/flow/PromptNode";
-import type { FlowNodeData, PromptNodeData } from "./components/flow/types";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -33,37 +30,7 @@ import {
     ContextMenuTrigger,
 } from "../components/ui/context-menu";
 import { useFlowStore } from "./store/flowStore";
-
-const initialNodes: Node<FlowNodeData | PromptNodeData>[] = [
-    {
-        id: "prompt",
-        type: "promptNode",
-        position: { x: -280, y: 40 },
-        data: {
-            title: "Prompt Builder",
-            badge: "Input",
-            tone: "sky",
-            systemPrompt:
-                "You are a helpful assistant that follows the tool policy.",
-            userPrompt:
-                "Summarize the user's request and draft a plan for the flow.",
-        },
-    },
-    {
-        id: "prompt-2",
-        type: "promptNode",
-        position: { x: 500, y: 40 },
-        data: {
-            title: "Prompt Builder",
-            badge: "Input",
-            tone: "violet",
-            systemPrompt:
-                "You are a planning assistant that converts tasks into steps.",
-            userPrompt:
-                "Generate the steps needed for the second model to execute.",
-        },
-    },
-];
+import { runNode } from "./flow/runNode";
 
 const edgeStyle = { stroke: "#ffffff" };
 
@@ -109,30 +76,21 @@ const createsCycle = (connection: Connection, edges: Edge[]) => {
     return false;
 };
 
-const initialEdges: Edge[] = [
-    {
-        id: "e-prompt-prompt",
-        source: "prompt",
-        target: "prompt-2",
-        targetHandle: "user",
-        style: edgeStyle,
-    },
-];
-
 export default function Home() {
-    const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-    const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+    const nodes = useFlowStore((state) => state.nodes);
+    const edges = useFlowStore((state) => state.edges);
+    const nodesById = useFlowStore((state) => state.nodesById);
+    const setNodes = useFlowStore((state) => state.setNodes);
+    const setEdges = useFlowStore((state) => state.setEdges);
+    const setResult = useFlowStore((state) => state.setResult);
+    const onNodesChange = useFlowStore((state) => state.onNodesChange);
+    const onEdgesChange = useFlowStore((state) => state.onEdgesChange);
     const flowBoundsRef = useRef<HTMLDivElement | null>(null);
-    const nodesById = useFlowStore((state) => state.nodes);
-    const setFromFlow = useFlowStore((state) => state.setFromFlow);
     const [contextMenu, setContextMenu] = useState<{
         id: string;
         x: number;
         y: number;
     } | null>(null);
-    useEffect(() => {
-        setFromFlow(nodes, edges);
-    }, [edges, nodes, setFromFlow]);
 
     const onConnect = useCallback(
         (connection: Connection) => {
@@ -189,7 +147,7 @@ export default function Home() {
         setContextMenu(null);
     }, [contextMenu, setEdges, setNodes]);
 
-    const runFlow = useCallback(() => {
+    const runFlow = useCallback(async () => {
         const route: string[] = [];
 
         const visited = new Set<string>();
@@ -218,7 +176,35 @@ export default function Home() {
             `%c [RUN FLOW] ${route.join(" → ")}`,
             "color: #bada55; font-size: 14px;"
         );
-    }, [nodesById]);
+
+        let previousResult = null;
+        for (let i = 0; i < route.length; i++) {
+            const nodeId = route[i];
+            const node = nodesById[nodeId];
+            if (!node) {
+                continue;
+            }
+
+            const inboundEdge = edges.find((edge) => edge.target === nodeId);
+            const result = await runNode(node, previousResult, inboundEdge);
+            const normalizedResult =
+                result === null || result === undefined
+                    ? null
+                    : typeof result === "string"
+                    ? result
+                    : (() => {
+                          try {
+                              return JSON.stringify(result, null, 2);
+                          } catch {
+                              return String(result);
+                          }
+                      })();
+            setResult(nodeId, normalizedResult);
+            console.log(`${i + 1}/${route.length}\n${normalizedResult}`);
+            previousResult = result;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+    }, [nodesById, edges, setResult]);
 
     return (
         <div className="min-h-screen bg-background text-foreground">

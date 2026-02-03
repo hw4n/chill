@@ -12,6 +12,8 @@ export type PromptNodeData = {
     tone: "emerald" | "violet" | "amber" | "sky";
     systemPrompt: string;
     userPrompt: string;
+    model: string;
+    returnJson: boolean;
 };
 
 export const toneStyles: Record<FlowNodeData["tone"], string> = {
