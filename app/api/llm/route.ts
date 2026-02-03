@@ -33,7 +33,7 @@ export async function POST(request: Request) {
             systemInstruction:
                 systemPrompt +
                 (body.returnAsJson
-                    ? "Return the response as single line JSON."
+                    ? "Return the response as single line JSON. You must not include any other text such as markdown or formatting."
                     : ""),
         },
     });
