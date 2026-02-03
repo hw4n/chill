@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
     addEdge,
     Background,
@@ -32,6 +32,7 @@ import {
     ContextMenuItem,
     ContextMenuTrigger,
 } from "../components/ui/context-menu";
+import { useFlowStore } from "./store/flowStore";
 
 const initialNodes: Node<FlowNodeData | PromptNodeData>[] = [
     {
@@ -122,11 +123,16 @@ export default function Home() {
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const flowBoundsRef = useRef<HTMLDivElement | null>(null);
+    const nodesById = useFlowStore((state) => state.nodes);
+    const setFromFlow = useFlowStore((state) => state.setFromFlow);
     const [contextMenu, setContextMenu] = useState<{
         id: string;
         x: number;
         y: number;
     } | null>(null);
+    useEffect(() => {
+        setFromFlow(nodes, edges);
+    }, [edges, nodes, setFromFlow]);
 
     const onConnect = useCallback(
         (connection: Connection) => {
@@ -183,6 +189,37 @@ export default function Home() {
         setContextMenu(null);
     }, [contextMenu, setEdges, setNodes]);
 
+    const runFlow = useCallback(() => {
+        const route: string[] = [];
+
+        const visited = new Set<string>();
+        const stack = ["prompt"];
+
+        while (stack.length) {
+            const currentId = stack.pop();
+            if (!currentId || visited.has(currentId)) {
+                continue;
+            }
+
+            const currentNode = nodesById[currentId];
+            if (!currentNode) {
+                continue;
+            }
+
+            visited.add(currentId);
+            route.push(currentId);
+
+            if (currentNode.nextIds.length > 0) {
+                stack.push(...currentNode.nextIds);
+            }
+        }
+
+        console.log(
+            `%c [RUN FLOW] ${route.join(" → ")}`,
+            "color: #bada55; font-size: 14px;"
+        );
+    }, [nodesById]);
+
     return (
         <div className="min-h-screen bg-background text-foreground">
             <header className="flex h-16 items-center justify-between border-b border-border/60 bg-background/80 px-6 backdrop-blur">
@@ -194,7 +231,9 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-3">
                     <Button size="sm">Save Draft</Button>
-                    <Button size="sm">Run Flow</Button>
+                    <Button size="sm" onClick={runFlow}>
+                        Run Flow
+                    </Button>
                 </div>
             </header>
 
