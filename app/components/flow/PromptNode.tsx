@@ -74,7 +74,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                     <div ref={modelAnchor}>
                         <ComboboxInput
                             placeholder="Select model"
-                            className="bg-background/60 text-xs"
+                            className="nodrag bg-background/60 text-xs"
                         />
                     </div>
                     <ComboboxContent anchor={modelAnchor}>
@@ -114,12 +114,15 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         System
                     </p>
                     <Textarea
-                        value={data.systemPrompt}
-                        onChange={(event) => {
-                            const nextValue = event.target.value;
-                            updateNodeData({ systemPrompt: nextValue });
+                        defaultValue={data.systemPrompt}
+                        onBlur={(event) => {
+                            updateNodeData({
+                                systemPrompt: event.target.value,
+                            });
                         }}
-                        className="mt-2 h-24 resize-none bg-background/60 text-xs"
+                        key={`${id}-system-${data.systemPrompt}`}
+                        className="nodrag mt-2 h-24 resize-none bg-background/60 text-xs"
+                        onPointerDown={(event) => event.stopPropagation()}
                     />
                 </div>
                 <div className="relative pl-4">
@@ -133,12 +136,13 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         User
                     </p>
                     <Textarea
-                        value={data.userPrompt}
-                        onChange={(event) => {
-                            const nextValue = event.target.value;
-                            updateNodeData({ userPrompt: nextValue });
+                        defaultValue={data.userPrompt}
+                        onBlur={(event) => {
+                            updateNodeData({ userPrompt: event.target.value });
                         }}
-                        className="mt-2 h-20 resize-none bg-background/60 text-xs"
+                        key={`${id}-user-${data.userPrompt}`}
+                        className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
+                        onPointerDown={(event) => event.stopPropagation()}
                     />
                 </div>
                 <div className="relative pl-4">
@@ -153,7 +157,8 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                     <Textarea
                         value={nodesById[id]?.result ?? "..."}
                         readOnly
-                        className="mt-2 h-20 resize-none bg-background/60 text-xs"
+                        className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
+                        onPointerDown={(event) => event.stopPropagation()}
                     />
                 </div>
             </CardContent>
