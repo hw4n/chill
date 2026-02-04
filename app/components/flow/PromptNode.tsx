@@ -122,6 +122,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         }}
                         key={`${id}-system-${data.systemPrompt}`}
                         className="nodrag mt-2 h-24 resize-none bg-background/60 text-xs"
+                        onWheelCapture={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
                     />
                 </div>
@@ -142,6 +143,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         }}
                         key={`${id}-user-${data.userPrompt}`}
                         className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
+                        onWheelCapture={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
                     />
                 </div>
@@ -158,6 +160,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         value={results[id] ?? "..."}
                         readOnly
                         className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
+                        onWheelCapture={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
                     />
                 </div>
