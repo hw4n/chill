@@ -167,7 +167,25 @@ export default function Home() {
         setContextMenu(null);
     }, []);
 
-    const deleteNode = useCallback(() => {
+    const handleCopyNode = useCallback(() => {
+        if (!contextMenu) {
+            return;
+        }
+        const targetNode = nodes.find((node) => node.id === contextMenu.id);
+        if (!targetNode) {
+            return;
+        }
+        addNode({
+            ...targetNode,
+            id: `${targetNode.id}-${Date.now()}`,
+            position: {
+                x: targetNode.position.x + 100,
+                y: targetNode.position.y + 100,
+            },
+        });
+    }, [contextMenu, nodes, addNode]);
+
+    const handleDeleteNode = useCallback(() => {
         if (!contextMenu) {
             return;
         }
@@ -389,7 +407,13 @@ export default function Home() {
                             onEscapeKeyDown={() => setContextMenu(null)}
                         >
                             <ContextMenuItem
-                                onClick={deleteNode}
+                                onClick={handleCopyNode}
+                                variant="default"
+                            >
+                                Copy node
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                                onClick={handleDeleteNode}
                                 variant="destructive"
                             >
                                 Delete node
