@@ -1,43 +1,35 @@
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
 import {
+    addEdge,
     applyEdgeChanges,
     applyNodeChanges,
-    type Edge,
-    type EdgeChange,
-    type Node,
-    type NodeChange,
+    Connection,
+    Edge,
+    EdgeChange,
+    Node,
+    NodeChange,
 } from "reactflow";
+import { create } from "zustand";
+import { devtools } from "zustand/middleware";
+import { NodeData } from "../components/flow/types";
 
-import type { FlowNodeData, PromptNodeData } from "../components/flow/types";
-
-export type StoredNode = {
-    type: string;
-    id: string;
-    result: string | null;
-    config: FlowNodeData | PromptNodeData;
-    nextIds: string[];
-};
-
-type FlowStoreState = {
-    nodes: Node<FlowNodeData | PromptNodeData>[];
+export type FlowStoreState = {
+    nodes: Node<NodeData>[];
     edges: Edge[];
-    nodesById: Record<string, StoredNode>;
-    results: Record<string, string | null>;
-    setNodes: (
-        updater:
-            | Node<FlowNodeData | PromptNodeData>[]
-            | ((
-                  nodes: Node<FlowNodeData | PromptNodeData>[]
-              ) => Node<FlowNodeData | PromptNodeData>[])
-    ) => void;
-    setEdges: (updater: Edge[] | ((edges: Edge[]) => Edge[])) => void;
-    setResult: (id: string, result: string | null) => void;
+    setNodes: (nodes: Node<NodeData>[]) => void;
+    addNode: (node: Node<NodeData>) => void;
+    setEdges: (edges: Edge[]) => void;
+    setHandleData: (id: string, handleId: string, value: string) => void;
+    updateNode: (id: string, node: Node<NodeData>) => void;
+
     onNodesChange: (changes: NodeChange[]) => void;
     onEdgesChange: (changes: EdgeChange[]) => void;
+    onConnect: (connection: Connection) => void;
+
+    results: Record<string, string | null>;
+    setResult: (id: string, result: string | null) => void;
 };
 
-const initialNodes: Node<FlowNodeData | PromptNodeData>[] = [
+const initialNodes: Node<NodeData>[] = [
     {
         id: "prompt",
         type: "promptNode",
@@ -61,7 +53,7 @@ const initialNodes: Node<FlowNodeData | PromptNodeData>[] = [
         data: {
             title: "Prompt Builder",
             badge: "Input",
-            tone: "violet",
+            tone: "sky",
             systemPrompt:
                 "You are a planning assistant that converts tasks into steps.",
             userPrompt:
@@ -77,106 +69,66 @@ const initialEdges: Edge[] = [
         id: "e-prompt-prompt",
         source: "prompt",
         target: "prompt-2",
-        targetHandle: "user",
-        style: { stroke: "#ffffff" },
+        targetHandle: "userPrompt",
     },
 ];
 
-const buildNodesMap = (
-    nodes: Node<FlowNodeData | PromptNodeData>[],
-    edges: Edge[],
-    results: Record<string, string | null>
-) => {
-    const adjacency = new Map<string, string[]>();
-    edges.forEach((edge) => {
-        const existing = adjacency.get(edge.source) ?? [];
-        adjacency.set(edge.source, [...existing, edge.target]);
-    });
-
-    return nodes.reduce<Record<string, StoredNode>>((acc, node) => {
-        const nextIds = adjacency.get(node.id) ?? [];
-        acc[node.id] = {
-            type: node.type ?? "default",
-            id: node.id,
-            result: results[node.id] ?? null,
-            config: node.data,
-            nextIds: Array.from(new Set(nextIds)),
-        };
-        return acc;
-    }, {});
-};
-
 export const useFlowStore = create<FlowStoreState>()(
-    devtools((set) => ({
+    devtools((set, get) => ({
         nodes: initialNodes,
         edges: initialEdges,
         results: {},
-        nodesById: buildNodesMap(initialNodes, initialEdges, {}),
-        setNodes: (updater) =>
-            set((state) => {
-                const nextNodes =
-                    typeof updater === "function"
-                        ? updater(state.nodes)
-                        : updater;
-                return {
-                    nodes: nextNodes,
-                    nodesById: buildNodesMap(
-                        nextNodes,
-                        state.edges,
-                        state.results
-                    ),
-                };
-            }),
-        setEdges: (updater) =>
-            set((state) => {
-                const nextEdges =
-                    typeof updater === "function"
-                        ? updater(state.edges)
-                        : updater;
-                return {
-                    edges: nextEdges,
-                    nodesById: buildNodesMap(
-                        state.nodes,
-                        nextEdges,
-                        state.results
-                    ),
-                };
-            }),
+
+        onNodesChange: (changes) => {
+            set({
+                nodes: applyNodeChanges(changes, get().nodes),
+            });
+        },
+        onEdgesChange: (changes) => {
+            set({
+                edges: applyEdgeChanges(changes, get().edges),
+            });
+        },
+        onConnect: (connection) => {
+            set({
+                edges: addEdge(connection, get().edges),
+            });
+        },
+        setNodes: (nodes) => {
+            set({ nodes });
+        },
+        setHandleData: (id, handleId, value) => {
+            set({
+                nodes: get().nodes.map((node) =>
+                    node.id === id
+                        ? {
+                              ...node,
+                              data: {
+                                  ...node.data,
+                                  [handleId]: value,
+                              },
+                          }
+                        : node
+                ),
+            });
+        },
+        updateNode: (id: string, node: Node<NodeData>) => {
+            set({ nodes: get().nodes.map((n) => (n.id === id ? node : n)) });
+        },
+        addNode: (node: Node<NodeData>) => {
+            set({ nodes: [...get().nodes, node] });
+        },
+        setEdges: (edges) => {
+            set({ edges });
+        },
         setResult: (id, result) =>
             set((state) => {
                 const nextResults = { ...state.results, [id]: result };
                 return {
                     results: nextResults,
-                    nodesById: buildNodesMap(
-                        state.nodes,
-                        state.edges,
-                        nextResults
-                    ),
-                };
-            }),
-        onNodesChange: (changes) =>
-            set((state) => {
-                const nextNodes = applyNodeChanges(changes, state.nodes);
-                return {
-                    nodes: nextNodes,
-                    nodesById: buildNodesMap(
-                        nextNodes,
-                        state.edges,
-                        state.results
-                    ),
-                };
-            }),
-        onEdgesChange: (changes) =>
-            set((state) => {
-                const nextEdges = applyEdgeChanges(changes, state.edges);
-                return {
-                    edges: nextEdges,
-                    nodesById: buildNodesMap(
-                        state.nodes,
-                        nextEdges,
-                        state.results
-                    ),
                 };
             }),
     }))
 );
+
+export default useFlowStore;

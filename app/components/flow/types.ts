@@ -1,20 +1,21 @@
-export type FlowNodeData = {
+export type BaseNodeData = {
     title: string;
-    subtitle: string;
-    detail: string;
+    subtitle?: string;
+    detail?: string;
     badge: string;
     tone: "emerald" | "violet" | "amber" | "sky";
 };
 
-export type PromptNodeData = {
-    title: string;
-    badge: string;
-    tone: "emerald" | "violet" | "amber" | "sky";
+export type FlowNodeData = BaseNodeData;
+
+export type PromptNodeData = BaseNodeData & {
     systemPrompt: string;
     userPrompt: string;
     model: string;
     returnJson: boolean;
 };
+
+export type NodeData = FlowNodeData | PromptNodeData;
 
 export const toneStyles: Record<FlowNodeData["tone"], string> = {
     emerald: "bg-emerald-500/10 text-emerald-200 border-emerald-500/30",

@@ -1,22 +1,20 @@
 import axios from "axios";
-import { PromptNodeData } from "../components/flow/types";
-import type { StoredNode } from "../store/flowStore";
-import { useFlowStore } from "../store/flowStore";
-import type { Edge } from "reactflow";
+import type { NodeData, PromptNodeData } from "../components/flow/types";
+import type { Edge, Node } from "reactflow";
 
 export async function runNode(
-    node: StoredNode,
+    node: Node<NodeData>,
     previousResult: unknown,
-    inboundEdge: Edge | undefined
+    inboundEdge: Edge | undefined,
+    setHandleData: (id: string, handleId: string, value: string) => void
 ): Promise<unknown> {
     switch (node.type) {
         case "promptNode":
-            const config = node.config as PromptNodeData;
-            const { setNodes } = useFlowStore.getState();
+            const config = node.data as PromptNodeData;
 
-            const isSystemPromptProvided =
-                inboundEdge?.targetHandle === "system";
-            const isUserPromptProvided = inboundEdge?.targetHandle === "user";
+            const inboundHandle = inboundEdge?.targetHandle;
+            const isSystemPromptProvided = inboundHandle === "systemPrompt";
+            const isUserPromptProvided = inboundHandle === "userPrompt";
             const normalizedPrevious =
                 previousResult === null || previousResult === undefined
                     ? ""
@@ -30,36 +28,8 @@ export async function runNode(
                           }
                       })();
 
-            if (isSystemPromptProvided) {
-                setNodes((nodes) =>
-                    nodes.map((existing) =>
-                        existing.id === node.id
-                            ? {
-                                  ...existing,
-                                  data: {
-                                      ...existing.data,
-                                      systemPrompt: normalizedPrevious,
-                                  },
-                              }
-                            : existing
-                    )
-                );
-            }
-
-            if (isUserPromptProvided) {
-                setNodes((nodes) =>
-                    nodes.map((existing) =>
-                        existing.id === node.id
-                            ? {
-                                  ...existing,
-                                  data: {
-                                      ...existing.data,
-                                      userPrompt: normalizedPrevious,
-                                  },
-                              }
-                            : existing
-                    )
-                );
+            if (inboundHandle) {
+                setHandleData(node.id, inboundHandle, normalizedPrevious);
             }
 
             const response = await axios.post("/api/llm", {

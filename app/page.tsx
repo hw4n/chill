@@ -9,11 +9,14 @@ import ReactFlow, {
     type Connection,
     type Edge,
     type Node,
+    useEdgesState,
+    useNodesState,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
 import FlowNode from "./components/flow/FlowNode";
 import PromptNode from "./components/flow/PromptNode";
+import type { NodeData } from "./components/flow/types";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import {
@@ -29,10 +32,9 @@ import {
     ContextMenuItem,
     ContextMenuTrigger,
 } from "../components/ui/context-menu";
-import { useFlowStore } from "./store/flowStore";
+import { FlowStoreState, useFlowStore } from "./store/flowStore";
 import { runNode } from "./flow/runNode";
-
-const edgeStyle = { stroke: "#ffffff" };
+import { useShallow } from "zustand/react/shallow";
 
 const createsCycle = (connection: Connection, edges: Edge[]) => {
     if (!connection.source || !connection.target) {
@@ -76,46 +78,58 @@ const createsCycle = (connection: Connection, edges: Edge[]) => {
     return false;
 };
 
+const selector = (state: FlowStoreState) => ({
+    nodes: state.nodes,
+    edges: state.edges,
+    onNodesChange: state.onNodesChange,
+    onEdgesChange: state.onEdgesChange,
+    onConnect: state.onConnect,
+    setNodes: state.setNodes,
+    addNode: state.addNode,
+    setEdges: state.setEdges,
+    setHandleData: state.setHandleData,
+    setResult: state.setResult,
+});
+
 export default function Home() {
-    const nodes = useFlowStore((state) => state.nodes);
-    const edges = useFlowStore((state) => state.edges);
-    const nodesById = useFlowStore((state) => state.nodesById);
-    const setNodes = useFlowStore((state) => state.setNodes);
-    const setEdges = useFlowStore((state) => state.setEdges);
-    const setResult = useFlowStore((state) => state.setResult);
-    const onNodesChange = useFlowStore((state) => state.onNodesChange);
-    const onEdgesChange = useFlowStore((state) => state.onEdgesChange);
+    const {
+        nodes,
+        edges,
+        onNodesChange,
+        onEdgesChange,
+        setNodes,
+        addNode,
+        setEdges,
+        setHandleData,
+        setResult,
+    } = useFlowStore(useShallow(selector));
     const flowBoundsRef = useRef<HTMLDivElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
         id: string;
         x: number;
         y: number;
     } | null>(null);
+
     const addPromptNode = useCallback(() => {
-        setNodes((current) => {
-            const id = `prompt-${Date.now()}`;
-            const offset = current.length * 40;
-            return [
-                ...current,
-                {
-                    id,
-                    type: "promptNode",
-                    position: { x: -120 + offset, y: 80 + offset },
-                    data: {
-                        title: "Prompt Builder",
-                        badge: "Input",
-                        tone: "sky",
-                        systemPrompt:
-                            "You are a helpful assistant that follows the tool policy.",
-                        userPrompt:
-                            "Summarize the user's request and draft a plan for the flow.",
-                        model: "gpt-4.1-mini",
-                        returnJson: false,
-                    },
-                },
-            ];
+        const id = `prompt-${Date.now()}`;
+        const offset = nodes.length * 40;
+        addNode({
+            id,
+            type: "promptNode",
+            position: { x: -120 + offset, y: 80 + offset },
+            data: {
+                title: "Prompt Builder",
+                badge: "Input",
+                tone: "sky",
+                systemPrompt:
+                    "You are a helpful assistant that follows the tool policy.",
+                userPrompt:
+                    "Summarize the user's request and draft a plan for the flow.",
+                model: "gemini-2.5-flash",
+                returnJson: false,
+            },
         });
-    }, [setNodes]);
+    }, [addNode, nodes.length]);
 
     const onConnect = useCallback(
         (connection: Connection) => {
@@ -123,9 +137,7 @@ export default function Home() {
                 return;
             }
 
-            setEdges((eds) =>
-                addEdge({ ...connection, style: edgeStyle }, eds)
-            );
+            setEdges(addEdge(connection, edges));
         },
         [edges, setEdges]
     );
@@ -160,17 +172,25 @@ export default function Home() {
             return;
         }
         const targetId = contextMenu.id;
-        setNodes((current) => current.filter((node) => node.id !== targetId));
-        setEdges((current) =>
-            current.filter(
+        setNodes(nodes.filter((node) => node.id !== targetId));
+        setEdges(
+            edges.filter(
                 (edge) => edge.source !== targetId && edge.target !== targetId
             )
         );
         setContextMenu(null);
-    }, [contextMenu, setEdges, setNodes]);
+    }, [contextMenu, edges, nodes, setEdges, setNodes]);
 
     const runFlow = useCallback(async () => {
+        const nodesById = new Map<string, Node<NodeData>>(
+            nodes.map((node) => [node.id, node])
+        );
         const route: string[] = [];
+        const adjacency = new Map<string, string[]>();
+        edges.forEach((edge) => {
+            const existing = adjacency.get(edge.source) ?? [];
+            adjacency.set(edge.source, [...existing, edge.target]);
+        });
 
         const visited = new Set<string>();
         const stack = ["prompt"];
@@ -181,7 +201,7 @@ export default function Home() {
                 continue;
             }
 
-            const currentNode = nodesById[currentId];
+            const currentNode = nodesById.get(currentId);
             if (!currentNode) {
                 continue;
             }
@@ -189,8 +209,9 @@ export default function Home() {
             visited.add(currentId);
             route.push(currentId);
 
-            if (currentNode.nextIds.length > 0) {
-                stack.push(...currentNode.nextIds);
+            const nextIds = adjacency.get(currentId);
+            if (nextIds) {
+                stack.push(...nextIds);
             }
         }
 
@@ -202,13 +223,18 @@ export default function Home() {
         let previousResult = null;
         for (let i = 0; i < route.length; i++) {
             const nodeId = route[i];
-            const node = nodesById[nodeId];
+            const node = nodesById.get(nodeId);
             if (!node) {
                 continue;
             }
 
             const inboundEdge = edges.find((edge) => edge.target === nodeId);
-            const result = await runNode(node, previousResult, inboundEdge);
+            const result = await runNode(
+                node,
+                previousResult,
+                inboundEdge,
+                setHandleData
+            );
             const normalizedResult =
                 result === null || result === undefined
                     ? null
@@ -226,7 +252,7 @@ export default function Home() {
             previousResult = result;
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
-    }, [nodesById, edges, setResult]);
+    }, [edges, nodes, setHandleData, setResult]);
 
     return (
         <div className="min-h-screen bg-background text-foreground">

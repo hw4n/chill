@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { Handle, Position, type NodeProps } from "reactflow";
+import { Handle, Position, type NodeProps, useReactFlow } from "reactflow";
 
 import { Badge } from "../../../components/ui/badge";
 import {
@@ -27,8 +27,8 @@ const modelOptions = [{ value: "gemini-2.5-flash", label: "gemini-2.5-flash" }];
 
 export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
     const modelAnchor = useComboboxAnchor();
-    const setNodes = useFlowStore((state) => state.setNodes);
-    const nodesById = useFlowStore((state) => state.nodesById);
+    const { setNodes } = useReactFlow<PromptNodeData>();
+    const results = useFlowStore((state) => state.results);
 
     const updateNodeData = useCallback(
         (partial: Partial<PromptNodeData>) => {
@@ -105,7 +105,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
             <CardContent className="space-y-3 p-4 pl-0 pt-0 text-xs text-muted-foreground">
                 <div className="relative pl-4">
                     <Handle
-                        id="system"
+                        id="systemPrompt"
                         type="target"
                         position={Position.Left}
                         className="absolute -left-2 top-1 h-3! w-3! border-2! border-white! bg-white!"
@@ -127,7 +127,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                 </div>
                 <div className="relative pl-4">
                     <Handle
-                        id="user"
+                        id="userPrompt"
                         type="target"
                         position={Position.Left}
                         className="absolute -left-2 top-1 h-3! w-3! border-2! border-white! bg-white!"
@@ -155,7 +155,7 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         Result
                     </p>
                     <Textarea
-                        value={nodesById[id]?.result ?? "..."}
+                        value={results[id] ?? "..."}
                         readOnly
                         className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
                         onPointerDown={(event) => event.stopPropagation()}
