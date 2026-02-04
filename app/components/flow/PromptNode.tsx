@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Handle, Position, type NodeProps, useReactFlow } from "reactflow";
 
 import { Badge } from "../../../components/ui/badge";
@@ -28,7 +28,7 @@ const modelOptions = [{ value: "gemini-2.5-flash", label: "gemini-2.5-flash" }];
 export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
     const modelAnchor = useComboboxAnchor();
     const { setNodes } = useReactFlow<PromptNodeData>();
-    const results = useFlowStore((state) => state.results);
+    const execution = useFlowStore((state) => state.execution);
 
     const updateNodeData = useCallback(
         (partial: Partial<PromptNodeData>) => {
@@ -43,8 +43,42 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
         [id, setNodes]
     );
 
+    const executionStatus = useMemo(
+        () => execution[id]?.status ?? "idle",
+        [execution, id]
+    );
+
+    const executionTime = useMemo(() => {
+        if (!execution[id]) {
+            return "never started";
+        }
+
+        if (!execution[id].startedAt || !execution[id].finishedAt) {
+            return "running...";
+        }
+
+        return `${
+            (execution[id].finishedAt - execution[id].startedAt) / 1000
+        }s`;
+    }, [execution, id]);
+
+    const statusBorderClass = useMemo(() => {
+        switch (executionStatus) {
+            case "running":
+                return "ring-2 ring-blue-500/70";
+            case "error":
+                return "ring-2 ring-red-500/70";
+            case "done":
+                return "ring-2 ring-emerald-500/70";
+            default:
+                return "";
+        }
+    }, [executionStatus]);
+
     return (
-        <Card className="min-w-[280px] border-border/60 bg-card/90 text-card-foreground shadow-lg shadow-black/20 backdrop-blur">
+        <Card
+            className={`min-w-[280px] rounded-xl border-border/60 bg-card/90 text-card-foreground shadow-lg shadow-black/20 backdrop-blur ${statusBorderClass}`}
+        >
             <CardHeader className="flex-row items-start justify-between space-y-0 p-4 pb-2">
                 <CardTitle className="text-sm font-semibold">
                     {data.title}
@@ -139,7 +173,9 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                     <Textarea
                         defaultValue={data.userPrompt}
                         onBlur={(event) => {
-                            updateNodeData({ userPrompt: event.target.value });
+                            updateNodeData({
+                                userPrompt: event.target.value,
+                            });
                         }}
                         key={`${id}-user-${data.userPrompt}`}
                         className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
@@ -157,12 +193,46 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                         Result
                     </p>
                     <Textarea
-                        value={results[id] ?? "..."}
+                        value={(() => {
+                            const current = execution[id];
+                            if (!current) {
+                                return "...";
+                            }
+                            if (current.status === "running") {
+                                return "Running...";
+                            }
+                            if (current.status === "error") {
+                                return `Error: ${
+                                    current.error ?? "Unknown error"
+                                }`;
+                            }
+                            if (typeof current.result === "string") {
+                                return current.result;
+                            }
+                            if (current.result) {
+                                try {
+                                    return JSON.stringify(
+                                        current.result,
+                                        null,
+                                        2
+                                    );
+                                } catch {
+                                    return String(current.result);
+                                }
+                            }
+                            return "";
+                        })()}
                         readOnly
                         className="nodrag mt-2 h-20 resize-none bg-background/60 text-xs"
                         onWheelCapture={(event) => event.stopPropagation()}
                         onPointerDown={(event) => event.stopPropagation()}
                     />
+                </div>
+                <div className="relative pl-4 text-[11px] text-muted-foreground">
+                    Last execution:
+                    <p className="text-[11px] pl-2 text-muted-foreground">
+                        {executionTime}
+                    </p>
                 </div>
             </CardContent>
         </Card>

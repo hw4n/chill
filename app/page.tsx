@@ -9,8 +9,6 @@ import ReactFlow, {
     type Connection,
     type Edge,
     type Node,
-    useEdgesState,
-    useNodesState,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -88,7 +86,8 @@ const selector = (state: FlowStoreState) => ({
     addNode: state.addNode,
     setEdges: state.setEdges,
     setHandleData: state.setHandleData,
-    setResult: state.setResult,
+    setExecution: state.setExecution,
+    resetExecutionStatuses: state.resetExecutionStatuses,
 });
 
 export default function Home() {
@@ -101,7 +100,8 @@ export default function Home() {
         addNode,
         setEdges,
         setHandleData,
-        setResult,
+        setExecution,
+        resetExecutionStatuses,
     } = useFlowStore(useShallow(selector));
     const flowBoundsRef = useRef<HTMLDivElement | null>(null);
     const [contextMenu, setContextMenu] = useState<{
@@ -220,6 +220,7 @@ export default function Home() {
             "color: #bada55; font-size: 14px;"
         );
 
+        resetExecutionStatuses();
         let previousResult = null;
         for (let i = 0; i < route.length; i++) {
             const nodeId = route[i];
@@ -229,30 +230,50 @@ export default function Home() {
             }
 
             const inboundEdge = edges.find((edge) => edge.target === nodeId);
-            const result = await runNode(
-                node,
-                previousResult,
-                inboundEdge,
-                setHandleData
-            );
-            const normalizedResult =
-                result === null || result === undefined
-                    ? null
-                    : typeof result === "string"
-                    ? result
-                    : (() => {
-                          try {
-                              return JSON.stringify(result, null, 2);
-                          } catch {
-                              return String(result);
-                          }
-                      })();
-            setResult(nodeId, normalizedResult);
-            console.log(`${i + 1}/${route.length}\n${normalizedResult}`);
-            previousResult = result;
-            await new Promise((resolve) => setTimeout(resolve, 0));
+            const startedAt = Date.now();
+            setExecution(nodeId, {
+                status: "running",
+                result: null,
+                startedAt,
+            });
+            try {
+                const result = await runNode(
+                    node,
+                    previousResult,
+                    inboundEdge,
+                    setHandleData
+                );
+                const executionResult =
+                    result === null || result === undefined
+                        ? null
+                        : typeof result === "string" ||
+                          typeof result === "object"
+                        ? result
+                        : String(result);
+                setExecution(nodeId, {
+                    status: "done",
+                    result: executionResult,
+                    startedAt,
+                    finishedAt: Date.now(),
+                });
+                console.log(`${i + 1}/${route.length}\n${result}`);
+                previousResult = result;
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : String(error);
+                setExecution(nodeId, {
+                    status: "error",
+                    result: null,
+                    error: message,
+                    startedAt,
+                    finishedAt: Date.now(),
+                });
+                console.log(`${i + 1}/${route.length}\n${message}`);
+                break;
+            }
         }
-    }, [edges, nodes, setHandleData, setResult]);
+    }, [edges, nodes, setHandleData, setExecution, resetExecutionStatuses]);
 
     return (
         <div className="min-h-screen bg-background text-foreground">

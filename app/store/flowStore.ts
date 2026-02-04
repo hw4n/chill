@@ -12,6 +12,16 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { NodeData } from "../components/flow/types";
 
+export type ExecutionStatus = "idle" | "running" | "done" | "error";
+
+export type ExecutionState = {
+    status: ExecutionStatus;
+    result: string | object | null;
+    error?: string;
+    startedAt?: number;
+    finishedAt?: number;
+};
+
 export type FlowStoreState = {
     nodes: Node<NodeData>[];
     edges: Edge[];
@@ -25,8 +35,9 @@ export type FlowStoreState = {
     onEdgesChange: (changes: EdgeChange[]) => void;
     onConnect: (connection: Connection) => void;
 
-    results: Record<string, string | null>;
-    setResult: (id: string, result: string | null) => void;
+    execution: Record<string, ExecutionState>;
+    setExecution: (id: string, execution: ExecutionState) => void;
+    resetExecutionStatuses: () => void;
 };
 
 const initialNodes: Node<NodeData>[] = [
@@ -77,7 +88,7 @@ export const useFlowStore = create<FlowStoreState>()(
     devtools((set, get) => ({
         nodes: initialNodes,
         edges: initialEdges,
-        results: {},
+        execution: {},
 
         onNodesChange: (changes) => {
             set({
@@ -121,13 +132,32 @@ export const useFlowStore = create<FlowStoreState>()(
         setEdges: (edges) => {
             set({ edges });
         },
-        setResult: (id, result) =>
+        setExecution: (id, execution) =>
             set((state) => {
-                const nextResults = { ...state.results, [id]: result };
+                const nextExecution = { ...state.execution, [id]: execution };
                 return {
-                    results: nextResults,
+                    execution: nextExecution,
                 };
             }),
+        resetExecutionStatuses: () => {
+            set((state: FlowStoreState) => {
+                const resetExecution = state.nodes.reduce<
+                    Record<string, ExecutionState>
+                >((acc, node) => {
+                    acc[node.id] = {
+                        status: "idle",
+                        result: null,
+                        error: undefined,
+                        startedAt: undefined,
+                        finishedAt: undefined,
+                    };
+                    return acc;
+                }, {});
+                return {
+                    execution: resetExecution,
+                };
+            });
+        },
     }))
 );
 
