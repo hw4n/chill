@@ -20,6 +20,8 @@ export type ExecutionState = {
     error?: string;
     startedAt?: number;
     finishedAt?: number;
+    inputTokens?: number;
+    outputTokens?: number;
 };
 
 export type FlowStoreState = {
@@ -39,7 +41,12 @@ export type FlowStoreState = {
     setExecution: (id: string, execution: ExecutionState) => void;
     resetExecutionStatuses: () => void;
     setExecutionStarted: (id: string) => void;
-    setExecutionFinished: (id: string, result: string | object | null) => void;
+    setExecutionFinished: (
+        id: string,
+        result: string | object | null,
+        inputTokens: number,
+        outputTokens: number
+    ) => void;
 };
 
 const initialNodes: Node<NodeData>[] = [
@@ -176,7 +183,12 @@ export const useFlowStore = create<FlowStoreState>()(
                 };
             });
         },
-        setExecutionFinished: (id: string, result: string | object | null) => {
+        setExecutionFinished: (
+            id: string,
+            result: string | object | null,
+            inputTokens: number,
+            outputTokens: number
+        ) => {
             set((state) => {
                 return {
                     execution: {
@@ -184,6 +196,8 @@ export const useFlowStore = create<FlowStoreState>()(
                         [id]: {
                             status: "done",
                             result,
+                            inputTokens,
+                            outputTokens,
                             error: undefined,
                             startedAt: state.execution[id].startedAt,
                             finishedAt: Date.now(),

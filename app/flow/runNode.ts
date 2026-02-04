@@ -2,12 +2,20 @@ import axios from "axios";
 import type { NodeData, PromptNodeData } from "../components/flow/types";
 import type { Edge, Node } from "reactflow";
 
+type LLMResponse = {
+    ok: boolean;
+    inputTokens: number;
+    outputTokens: number;
+    output: unknown;
+    error?: string;
+};
+
 export async function runNode(
     node: Node<NodeData>,
     inboundEdges: Edge[],
     resultByNode: Map<string, unknown>,
     setHandleData: (id: string, handleId: string, value: string) => void
-): Promise<unknown> {
+): Promise<LLMResponse | undefined> {
     switch (node.type) {
         case "promptNode":
             const config = node.data as PromptNodeData;
@@ -39,7 +47,7 @@ export async function runNode(
             const hasSystemPrompt = inboundValuesByHandle.has("systemPrompt");
             const hasUserPrompt = inboundValuesByHandle.has("userPrompt");
 
-            const response = await axios.post("/api/llm", {
+            const response = await axios.post<LLMResponse>("/api/llm", {
                 // model: config.model,
                 systemPrompt: hasSystemPrompt
                     ? inboundValuesByHandle.get("systemPrompt") ?? ""
@@ -50,16 +58,8 @@ export async function runNode(
                 returnAsJson: config.returnJson,
             });
 
-            return response.data.output;
+            return response.data;
         default:
-            if (inboundEdges.length === 1) {
-                return resultByNode.get(inboundEdges[0].source);
-            }
-            if (inboundEdges.length > 1) {
-                return inboundEdges.map((edge) =>
-                    resultByNode.get(edge.source)
-                );
-            }
             return undefined;
     }
 }

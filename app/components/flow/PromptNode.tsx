@@ -230,9 +230,26 @@ export default function PromptNode({ data, id }: NodeProps<PromptNodeData>) {
                 </div>
                 <div className="relative pl-4 text-[11px] text-muted-foreground">
                     Last execution:
-                    <p className="text-[11px] pl-2 text-muted-foreground">
-                        {executionTime}
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1">
+                        <Badge
+                            variant="outline"
+                            className="border-border/60 text-[10px] text-muted-foreground"
+                        >
+                            {executionTime}
+                        </Badge>
+                        <Badge
+                            variant="outline"
+                            className="border-border/60 text-[10px] text-muted-foreground"
+                        >
+                            input {execution[id]?.inputTokens ?? 0}
+                        </Badge>
+                        <Badge
+                            variant="outline"
+                            className="border-border/60 text-[10px] text-muted-foreground"
+                        >
+                            output {execution[id]?.outputTokens ?? 0}
+                        </Badge>
+                    </div>
                 </div>
             </CardContent>
         </Card>

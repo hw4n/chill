@@ -79,6 +79,7 @@ const createsCycle = (connection: Connection, edges: Edge[]) => {
 const selector = (state: FlowStoreState) => ({
     nodes: state.nodes,
     edges: state.edges,
+    execution: state.execution,
     onNodesChange: state.onNodesChange,
     onEdgesChange: state.onEdgesChange,
     onConnect: state.onConnect,
@@ -96,6 +97,7 @@ export default function Home() {
     const {
         nodes,
         edges,
+        execution,
         onNodesChange,
         onEdgesChange,
         setNodes,
@@ -150,6 +152,26 @@ export default function Home() {
         () => ({ flowNode: FlowNode, promptNode: PromptNode }),
         []
     );
+
+    const tokenCosts = useMemo(() => {
+        const totals = Object.values(execution).reduce(
+            (acc, current) => {
+                acc.input += current.inputTokens ?? 0;
+                acc.output += current.outputTokens ?? 0;
+                return acc;
+            },
+            { input: 0, output: 0 }
+        );
+        const inputCost = (totals.input / 1_000_000) * 0.3;
+        const outputCost = (totals.output / 1_000_000) * 2.5;
+        return {
+            inputTokens: totals.input,
+            outputTokens: totals.output,
+            inputCost,
+            outputCost,
+            totalCost: inputCost + outputCost,
+        };
+    }, [execution]);
 
     const onNodeContextMenu = useCallback(
         (event: React.MouseEvent, node: Node) => {
@@ -278,15 +300,23 @@ export default function Home() {
                     setHandleData
                 );
                 const executionResult =
-                    result === null || result === undefined
-                        ? null
-                        : typeof result === "string" ||
-                          typeof result === "object"
-                        ? result
-                        : String(result);
-                setExecutionFinished(nodeId, executionResult);
-                resultByNode.set(nodeId, result);
-                return { nodeId, status: "done" as const, result };
+                    result?.ok === false ? result.error : result?.output;
+                setExecutionFinished(
+                    nodeId,
+                    typeof executionResult === "string" ||
+                        typeof executionResult === "object" ||
+                        executionResult === null
+                        ? executionResult
+                        : String(executionResult),
+                    result?.inputTokens || -1,
+                    result?.outputTokens || -1
+                );
+                resultByNode.set(nodeId, executionResult);
+                return {
+                    nodeId,
+                    status: "done" as const,
+                    result: executionResult,
+                };
             } catch (error) {
                 const message =
                     error instanceof Error ? error.message : String(error);
@@ -497,50 +527,63 @@ export default function Home() {
                     </h2>
                     <div className="mt-5 space-y-4 text-sm text-muted-foreground">
                         <Card className="border-border/60 bg-card/70">
-                            <CardHeader className="p-4 pb-2 text-foreground">
-                                <CardTitle>LLM Core</CardTitle>
-                                <p className="text-xs text-muted-foreground">
-                                    gpt-4.1-mini · temperature 0.4
-                                </p>
+                            <CardHeader className="p-4 -mb-6 text-foreground">
+                                <CardTitle>gemini-2.5-flash</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-2 p-4 pt-0 text-xs">
+                            <CardContent className="space-y-2 pt-0 text-xs">
                                 <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">
-                                        Tokens
+                                        Input
                                     </span>
-                                    <span>1,280</span>
-                                </div>
-                                <div className="flex items-center justify-between">
+                                    <span>$0.3/1M</span>
                                     <span className="text-muted-foreground">
-                                        Latency
+                                        Output
                                     </span>
-                                    <span>1.2s</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-muted-foreground">
-                                        Cost
-                                    </span>
-                                    <span>$0.008</span>
+                                    <span>$2.5/1M</span>
                                 </div>
                             </CardContent>
-                        </Card>
-                        <Card className="border-border/60 bg-card/70">
-                            <CardHeader className="p-4 pb-2">
+                            <CardHeader className="p-4 -mb-6">
                                 <CardTitle className="text-sm">
-                                    Run Checklist
+                                    Token Cost
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-4 pt-0 text-xs text-muted-foreground">
-                                <ul className="space-y-2">
-                                    <li>✓ Prompt validated</li>
-                                    <li>✓ Tools connected</li>
-                                    <li>• Guardrails pending</li>
-                                </ul>
+                                <div className="space-y-2 pb-2">
+                                    <p>
+                                        Input:{" "}
+                                        {tokenCosts.inputTokens.toLocaleString()}{" "}
+                                        tokens → $
+                                        {tokenCosts.inputCost.toFixed(4)}
+                                    </p>
+                                    <p>
+                                        Output:{" "}
+                                        {tokenCosts.outputTokens.toLocaleString()}{" "}
+                                        tokens → $
+                                        {tokenCosts.outputCost.toFixed(4)}
+                                    </p>
+                                    <p>
+                                        Total: $
+                                        {tokenCosts.totalCost.toFixed(4)}
+                                    </p>
+                                </div>
+                                <Separator className="my-2 bg-border/60" />
+                                {[1, 2, 3, 4, 5].map((pow) => (
+                                    <div
+                                        key={pow}
+                                        className="flex items-center justify-between"
+                                    >
+                                        <span>{10 ** pow} api calls</span>
+                                        <span>
+                                            $
+                                            {(
+                                                tokenCosts.totalCost *
+                                                10 ** pow
+                                            ).toFixed(2)}
+                                        </span>
+                                    </div>
+                                ))}
                             </CardContent>
                         </Card>
-                        <Button size="sm" className="w-full">
-                            Open Trace Viewer
-                        </Button>
                     </div>
                 </aside>
             </div>
