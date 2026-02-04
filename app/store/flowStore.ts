@@ -38,6 +38,8 @@ export type FlowStoreState = {
     execution: Record<string, ExecutionState>;
     setExecution: (id: string, execution: ExecutionState) => void;
     resetExecutionStatuses: () => void;
+    setExecutionStarted: (id: string) => void;
+    setExecutionFinished: (id: string, result: string | object | null) => void;
 };
 
 const initialNodes: Node<NodeData>[] = [
@@ -141,7 +143,7 @@ export const useFlowStore = create<FlowStoreState>()(
             }),
         resetExecutionStatuses: () => {
             set((state: FlowStoreState) => {
-                const resetExecution = state.nodes.reduce<
+                const newExecution = state.nodes.reduce<
                     Record<string, ExecutionState>
                 >((acc, node) => {
                     acc[node.id] = {
@@ -153,8 +155,40 @@ export const useFlowStore = create<FlowStoreState>()(
                     };
                     return acc;
                 }, {});
+
                 return {
-                    execution: resetExecution,
+                    execution: newExecution,
+                };
+            });
+        },
+        setExecutionStarted: (id: string) => {
+            set((state) => {
+                return {
+                    execution: {
+                        ...state.execution,
+                        [id]: {
+                            status: "running",
+                            result: null,
+                            error: undefined,
+                            startedAt: Date.now(),
+                        },
+                    },
+                };
+            });
+        },
+        setExecutionFinished: (id: string, result: string | object | null) => {
+            set((state) => {
+                return {
+                    execution: {
+                        ...state.execution,
+                        [id]: {
+                            status: "done",
+                            result,
+                            error: undefined,
+                            startedAt: state.execution[id].startedAt,
+                            finishedAt: Date.now(),
+                        },
+                    },
                 };
             });
         },

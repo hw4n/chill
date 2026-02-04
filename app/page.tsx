@@ -87,6 +87,8 @@ const selector = (state: FlowStoreState) => ({
     setEdges: state.setEdges,
     setHandleData: state.setHandleData,
     setExecution: state.setExecution,
+    setExecutionStarted: state.setExecutionStarted,
+    setExecutionFinished: state.setExecutionFinished,
     resetExecutionStatuses: state.resetExecutionStatuses,
 });
 
@@ -101,6 +103,8 @@ export default function Home() {
         setEdges,
         setHandleData,
         setExecution,
+        setExecutionStarted,
+        setExecutionFinished,
         resetExecutionStatuses,
     } = useFlowStore(useShallow(selector));
     const flowBoundsRef = useRef<HTMLDivElement | null>(null);
@@ -203,62 +207,74 @@ export default function Home() {
         const nodesById = new Map<string, Node<NodeData>>(
             nodes.map((node) => [node.id, node])
         );
-        const route: string[] = [];
         const adjacency = new Map<string, string[]>();
-        edges.forEach((edge) => {
-            const existing = adjacency.get(edge.source) ?? [];
-            adjacency.set(edge.source, [...existing, edge.target]);
+        const incomingByTarget = new Map<string, string[]>();
+        const remainingDeps = new Map<string, number>();
+        const resultByNode = new Map<string, unknown>();
+
+        nodes.forEach((node) => {
+            remainingDeps.set(node.id, 0);
+            adjacency.set(node.id, []);
+            incomingByTarget.set(node.id, []);
         });
 
-        const visited = new Set<string>();
-        const stack = ["prompt"];
+        edges.forEach((edge) => {
+            const list = adjacency.get(edge.source) ?? [];
+            adjacency.set(edge.source, [...list, edge.target]);
 
-        while (stack.length) {
-            const currentId = stack.pop();
-            if (!currentId || visited.has(currentId)) {
-                continue;
+            const incoming = incomingByTarget.get(edge.target) ?? [];
+            incomingByTarget.set(edge.target, [...incoming, edge.source]);
+
+            remainingDeps.set(
+                edge.target,
+                (remainingDeps.get(edge.target) ?? 0) + 1
+            );
+        });
+
+        const ready: string[] = [];
+        const enqueued = new Set<string>();
+        const enqueue = (nodeId: string) => {
+            if (enqueued.has(nodeId)) {
+                return;
             }
+            enqueued.add(nodeId);
+            ready.push(nodeId);
+        };
 
-            const currentNode = nodesById.get(currentId);
-            if (!currentNode) {
-                continue;
+        remainingDeps.forEach((count, nodeId) => {
+            if (count === 0) {
+                enqueue(nodeId);
             }
+        });
 
-            visited.add(currentId);
-            route.push(currentId);
-
-            const nextIds = adjacency.get(currentId);
-            if (nextIds) {
-                stack.push(...nextIds);
-            }
+        if (ready.length === 0) {
+            nodes.forEach((node) => enqueue(node.id));
         }
 
         console.log(
-            `%c [RUN FLOW] ${route.join(" → ")}`,
+            `%c [RUN FLOW] ready: ${ready.join(", ")}`,
             "color: #bada55; font-size: 14px;"
         );
 
         resetExecutionStatuses();
-        let previousResult = null;
-        for (let i = 0; i < route.length; i++) {
-            const nodeId = route[i];
+
+        let aborted = false;
+
+        const runOne = async (nodeId: string) => {
             const node = nodesById.get(nodeId);
             if (!node) {
-                continue;
+                return { nodeId, status: "skipped" as const, result: null };
             }
 
-            const inboundEdge = edges.find((edge) => edge.target === nodeId);
+            const inboundEdges = edges.filter((edge) => edge.target === nodeId);
+
             const startedAt = Date.now();
-            setExecution(nodeId, {
-                status: "running",
-                result: null,
-                startedAt,
-            });
+            setExecutionStarted(nodeId);
             try {
                 const result = await runNode(
                     node,
-                    previousResult,
-                    inboundEdge,
+                    inboundEdges,
+                    resultByNode,
                     setHandleData
                 );
                 const executionResult =
@@ -268,15 +284,9 @@ export default function Home() {
                           typeof result === "object"
                         ? result
                         : String(result);
-                setExecution(nodeId, {
-                    status: "done",
-                    result: executionResult,
-                    startedAt,
-                    finishedAt: Date.now(),
-                });
-                console.log(`${i + 1}/${route.length}\n${result}`);
-                previousResult = result;
-                await new Promise((resolve) => setTimeout(resolve, 0));
+                setExecutionFinished(nodeId, executionResult);
+                resultByNode.set(nodeId, result);
+                return { nodeId, status: "done" as const, result };
             } catch (error) {
                 const message =
                     error instanceof Error ? error.message : String(error);
@@ -287,11 +297,70 @@ export default function Home() {
                     startedAt,
                     finishedAt: Date.now(),
                 });
-                console.log(`${i + 1}/${route.length}\n${message}`);
+                return { nodeId, status: "error" as const, result: message };
+            }
+        };
+
+        const running = new Map<
+            string,
+            Promise<{
+                nodeId: string;
+                status: "done" | "error" | "skipped";
+                result: unknown;
+            }>
+        >();
+
+        while (ready.length > 0 || running.size > 0) {
+            while (!aborted && ready.length > 0) {
+                const nodeId = ready.shift();
+                if (!nodeId) {
+                    continue;
+                }
+                const task = runOne(nodeId);
+                running.set(nodeId, task);
+            }
+
+            if (running.size === 0) {
                 break;
             }
+
+            const finished = await Promise.race(running.values());
+            running.delete(finished.nodeId);
+
+            if (finished.status === "error") {
+                aborted = true;
+                continue;
+            }
+
+            const nextIds = adjacency.get(finished.nodeId) ?? [];
+            nextIds.forEach((nextId) => {
+                const nextCount = (remainingDeps.get(nextId) ?? 0) - 1;
+                remainingDeps.set(nextId, nextCount);
+                if (nextCount !== 0 || aborted) {
+                    return;
+                }
+                const incoming = incomingByTarget.get(nextId) ?? [];
+                const allInputsReady = incoming.every((sourceId) =>
+                    resultByNode.has(sourceId)
+                );
+                if (allInputsReady) {
+                    enqueue(nextId);
+                }
+            });
         }
-    }, [edges, nodes, setHandleData, setExecution, resetExecutionStatuses]);
+
+        if (aborted && running.size > 0) {
+            await Promise.allSettled(running.values());
+        }
+    }, [
+        edges,
+        nodes,
+        setHandleData,
+        setExecutionStarted,
+        setExecutionFinished,
+        setExecution,
+        resetExecutionStatuses,
+    ]);
 
     return (
         <div className="min-h-screen bg-background text-foreground">

@@ -4,47 +4,62 @@ import type { Edge, Node } from "reactflow";
 
 export async function runNode(
     node: Node<NodeData>,
-    previousResult: unknown,
-    inboundEdge: Edge | undefined,
+    inboundEdges: Edge[],
+    resultByNode: Map<string, unknown>,
     setHandleData: (id: string, handleId: string, value: string) => void
 ): Promise<unknown> {
     switch (node.type) {
         case "promptNode":
             const config = node.data as PromptNodeData;
+            const inboundValuesByHandle = new Map<string, string>();
+            const normalize = (value: unknown) => {
+                if (value === null || value === undefined) {
+                    return "";
+                }
+                if (typeof value === "string") {
+                    return value;
+                }
+                try {
+                    return JSON.stringify(value, null, 2);
+                } catch {
+                    return String(value);
+                }
+            };
 
-            const inboundHandle = inboundEdge?.targetHandle;
-            const isSystemPromptProvided = inboundHandle === "systemPrompt";
-            const isUserPromptProvided = inboundHandle === "userPrompt";
-            const normalizedPrevious =
-                previousResult === null || previousResult === undefined
-                    ? ""
-                    : typeof previousResult === "string"
-                    ? previousResult
-                    : (() => {
-                          try {
-                              return JSON.stringify(previousResult, null, 2);
-                          } catch {
-                              return String(previousResult);
-                          }
-                      })();
+            inboundEdges.forEach((edge) => {
+                if (!edge.targetHandle) {
+                    return;
+                }
+                const result = resultByNode.get(edge.source);
+                const normalized = normalize(result);
+                inboundValuesByHandle.set(edge.targetHandle, normalized);
+                setHandleData(node.id, edge.targetHandle, normalized);
+            });
 
-            if (inboundHandle) {
-                setHandleData(node.id, inboundHandle, normalizedPrevious);
-            }
+            const hasSystemPrompt = inboundValuesByHandle.has("systemPrompt");
+            const hasUserPrompt = inboundValuesByHandle.has("userPrompt");
 
             const response = await axios.post("/api/llm", {
                 // model: config.model,
-                systemPrompt: isSystemPromptProvided
-                    ? normalizedPrevious
+                systemPrompt: hasSystemPrompt
+                    ? inboundValuesByHandle.get("systemPrompt") ?? ""
                     : config.systemPrompt,
-                userPrompt: isUserPromptProvided
-                    ? normalizedPrevious
+                userPrompt: hasUserPrompt
+                    ? inboundValuesByHandle.get("userPrompt") ?? ""
                     : config.userPrompt,
                 returnAsJson: config.returnJson,
             });
 
             return response.data.output;
         default:
-            return previousResult;
+            if (inboundEdges.length === 1) {
+                return resultByNode.get(inboundEdges[0].source);
+            }
+            if (inboundEdges.length > 1) {
+                return inboundEdges.map((edge) =>
+                    resultByNode.get(edge.source)
+                );
+            }
+            return undefined;
     }
 }
