@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { Node, Edge } from "reactflow";
 import type { PromptNodeData } from "../components/flow/types";
+import { toast } from "sonner";
 
 interface UseFlowExportProps {
     nodes: Node[];
@@ -232,11 +233,17 @@ export async function POST(request) {
 
         try {
             await navigator.clipboard.writeText(template);
+            toast.success("클립보드에 복사 완료!", {
+                description: "Next.js API route가 클립보드에 복사되었습니다.",
+            });
             console.log(
                 "%c [EXPORT FLOW] API route copied to clipboard",
                 "color: #bada55; font-size: 14px;"
             );
-        } catch {
+        } catch (error) {
+            toast.error("복사 실패", {
+                description: "클립보드 접근 권한이 없습니다.",
+            });
             console.log(
                 "%c [EXPORT FLOW] Clipboard unavailable, showing code below",
                 "color: #bada55; font-size: 14px;"
